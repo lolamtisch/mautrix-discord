@@ -2153,14 +2153,17 @@ func (portal *Portal) UpdateChannelAvatar(iconID string) bool {
 	if portal.Avatar == iconID && (iconID == "") == portal.AvatarURL.IsEmpty() && (portal.AvatarSet || portal.MXID == "") {
 		return false
 	}
-	portal.log.Debugfln("Updating channel avatar %q -> %q", portal.Avatar, iconID)
+	portal.log.Debug().
+		Str("old_avatar_id", portal.Avatar).
+		Str("new_avatar_id", iconID).
+		Msg("Updating channel avatar")
 	portal.Avatar = iconID
 	portal.AvatarSet = false
 	portal.AvatarURL = id.ContentURI{}
 	if portal.Avatar != "" {
 		uri, err := uploadAvatar(portal.MainIntent(), discordgo.EndpointGuildIcon(portal.GuildID, iconID))
 		if err != nil {
-			portal.log.Warnfln("Failed to reupload channel avatar %s: %v", portal.Avatar, err)
+			portal.log.Err(err).Str("avatar_id", portal.Avatar).Msg("Failed to reupload channel avatar")
 			return true
 		} else {
 			portal.AvatarURL = uri
