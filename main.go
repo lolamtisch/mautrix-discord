@@ -28,6 +28,9 @@ import (
 
 	"go.mau.fi/mautrix-discord/config"
 	"go.mau.fi/mautrix-discord/database"
+
+	"github.com/bwmarrin/discordgo"
+	"maunium.net/go/mautrix/event"
 )
 
 // Information to find out exactly which commit the bridge was built from.
@@ -76,6 +79,36 @@ type DiscordBridge struct {
 	attachmentTransfers *util.SyncMap[attachmentKey, *util.ReturnableOnce[*database.File]]
 }
 
+func (br *DiscordBridge) HandlePresence(evt *event.Event) {
+	user := br.GetUserByMXID(evt.Sender)
+	if user == nil || user.Session == nil {
+		return
+	}
+
+	switch evt.Content.AsPresence().Presence {
+		case event.PresenceOnline:
+			br.Log.Debugln("Marking online")
+			user.Session.Identify.Presence.Status = string(discordgo.StatusOnline)
+		case event.PresenceUnavailable:
+			br.Log.Debugln("Marking Idle")
+			user.Session.Identify.Presence.Status = string(discordgo.StatusIdle)
+		case event.PresenceOffline:
+			br.Log.Debugln("Marking Offline")
+			user.Session.Identify.Presence.Status = string(discordgo.StatusInvisible)
+	}
+
+	err := user.Session.UpdateStatusComplex(discordgo.UpdateStatusData{
+		AFK: false,
+		Status: user.Session.Identify.Presence.Status,
+	})
+
+	if err != nil {
+		br.Log.Warnln("Failed to update status:", err)
+	}
+
+}
+
+
 func (br *DiscordBridge) GetExampleConfig() string {
 	return ExampleConfig
 }
@@ -91,6 +124,8 @@ func (br *DiscordBridge) GetConfigPtr() interface{} {
 func (br *DiscordBridge) Init() {
 	br.CommandProcessor = commands.NewProcessor(&br.Bridge)
 	br.RegisterCommands()
+
+	br.EventProcessor.On(event.EphemeralEventPresence, br.HandlePresence)
 
 	matrixHTMLParser.PillConverter = br.pillConverter
 

@@ -2148,6 +2148,29 @@ func (portal *Portal) UpdateGroupDMAvatar(iconID string) bool {
 	return true
 }
 
+
+func (portal *Portal) UpdateChannelAvatar(iconID string) bool {
+	if portal.Avatar == iconID && (iconID == "") == portal.AvatarURL.IsEmpty() && (portal.AvatarSet || portal.MXID == "") {
+		return false
+	}
+	portal.log.Debugfln("Updating channel avatar %q -> %q", portal.Avatar, iconID)
+	portal.Avatar = iconID
+	portal.AvatarSet = false
+	portal.AvatarURL = id.ContentURI{}
+	if portal.Avatar != "" {
+		uri, err := uploadAvatar(portal.MainIntent(), discordgo.EndpointGuildIcon(portal.GuildID, iconID))
+		if err != nil {
+			portal.log.Warnfln("Failed to reupload channel avatar %s: %v", portal.Avatar, err)
+			return true
+		} else {
+			portal.AvatarURL = uri
+		}
+	}
+	portal.updateRoomAvatar()
+	return true
+}
+
+
 func (portal *Portal) updateRoomAvatar() {
 	if portal.MXID == "" || portal.AvatarURL.IsEmpty() || !portal.shouldSetDMRoomMetadata() {
 		return
@@ -2346,6 +2369,9 @@ func (portal *Portal) UpdateInfo(source *User, meta *discordgo.Channel) *discord
 		fallthrough
 	default:
 		changed = portal.UpdateName(meta) || changed
+		if (portal.Type == discordgo.ChannelTypeGuildText) {
+			changed = portal.UpdateChannelAvatar(portal.Guild.Avatar) || changed
+		}
 		if portal.MXID != "" {
 			portal.ensureUserInvited(source, false)
 		}
